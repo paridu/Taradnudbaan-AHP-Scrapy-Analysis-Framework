@@ -22,7 +22,8 @@ import {
   Layers,
   PieChart,
   Database,
-  ArrowRight
+  ArrowRight,
+  ImageIcon
 } from 'lucide-react';
 import { ScrapingProject } from '../types';
 import { analyzeStrategicOpportunities, analyzeProvincialBreakdown } from '../services/geminiService';
@@ -40,6 +41,7 @@ interface ProvincialData {
 
 interface RankedAsset {
   id: string;
+  imageUrl: string;
   score: number; 
   type: string;
   location: string;
@@ -65,11 +67,71 @@ const DataInsights: React.FC<DataInsightsProps> = ({ projects }) => {
   const [viewMode, setViewMode] = useState<'ranking' | 'provincial'>('ranking');
 
   const [rankedAssets, setRankedAssets] = useState<RankedAsset[]>([
-    { id: 'LED-BK-001', score: 9.8, type: 'บ้านเดี่ยว', location: 'ปราจีนบุรี (เมือง)', province: 'ปราจีนบุรี', startPrice: 1200000, appraisal: 2500000, gap: 52, status: 'ว่าง', trend: 'up' },
-    { id: 'LED-BK-042', score: 9.2, type: 'ที่ดินเปล่า', location: 'กบินทร์บุรี', province: 'ปราจีนบุรี', startPrice: 450000, appraisal: 900000, gap: 50, status: 'ว่าง', trend: 'stable' },
-    { id: 'LED-BK-115', score: 8.7, type: 'ทาวน์เฮ้าส์', location: 'เมืองปราจีน', province: 'ปราจีนบุรี', startPrice: 800000, appraisal: 1400000, gap: 43, status: 'มีผู้อาศัย', trend: 'up' },
-    { id: 'LED-BK-209', score: 8.5, type: 'คอนโด', location: 'ศรีมหาโพธิ', province: 'ปราจีนบุรี', startPrice: 550000, appraisal: 950000, gap: 42, status: 'ว่าง', trend: 'down' },
-    { id: 'LED-BK-301', score: 7.9, type: 'ที่ดินเปล่า', location: 'นาดี', province: 'ปราจีนบุรี', startPrice: 1500000, appraisal: 2400000, gap: 37, status: 'ว่าง', trend: 'up' },
+    { 
+      id: 'LED-BK-001', 
+      imageUrl: 'https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=400&q=80',
+      score: 9.8, 
+      type: 'บ้านเดี่ยว', 
+      location: 'ปราจีนบุรี (เมือง)', 
+      province: 'ปราจีนบุรี', 
+      startPrice: 1200000, 
+      appraisal: 2500000, 
+      gap: 52, 
+      status: 'ว่าง', 
+      trend: 'up' 
+    },
+    { 
+      id: 'LED-BK-042', 
+      imageUrl: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=400&q=80',
+      score: 9.2, 
+      type: 'ที่ดินเปล่า', 
+      location: 'กบินทร์บุรี', 
+      province: 'ปราจีนบุรี', 
+      startPrice: 450000, 
+      appraisal: 900000, 
+      gap: 50, 
+      status: 'ว่าง', 
+      trend: 'stable' 
+    },
+    { 
+      id: 'LED-BK-115', 
+      imageUrl: 'https://images.unsplash.com/photo-1570129477492-45c003edd2be?w=400&q=80',
+      score: 8.7, 
+      type: 'ทาวน์เฮ้าส์', 
+      location: 'เมืองปราจีน', 
+      province: 'ปราจีนบุรี', 
+      startPrice: 800000, 
+      appraisal: 1400000, 
+      gap: 43, 
+      status: 'มีผู้อาศัย', 
+      trend: 'up' 
+    },
+    { 
+      id: 'LED-BK-209', 
+      imageUrl: 'https://images.unsplash.com/photo-1554995207-c18c203602cb?w=400&q=80',
+      score: 8.5, 
+      type: 'คอนโด', 
+      location: 'ศรีมหาโพธิ', 
+      province: 'ปราจีนบุรี', 
+      startPrice: 550000, 
+      appraisal: 950000, 
+      gap: 42, 
+      status: 'ว่าง', 
+      trend: 'down' 
+    },
+    { 
+      id: 'LED-BK-301', 
+      imageUrl: 'https://images.unsplash.com/photo-1599809275372-b40c7e9316af?w=400&q=80',
+      score: 7.9, 
+      type: 'ที่ดินเปล่า', 
+      location: 'นาดี', 
+      province: 'ปราจีนบุรี', 
+      startPrice: 1500000, 
+      appraisal: 2400000, 
+      gap: 37, 
+      status: 'ว่าง', 
+      trend: 'up' 
+    },
   ]);
 
   const handleUpsertDailySync = () => {
@@ -90,6 +152,12 @@ const DataInsights: React.FC<DataInsightsProps> = ({ projects }) => {
           setTimeout(() => {
             setIsSyncing(false);
             setShowUpsertAlert(true);
+            // Auto update top asset gap for visual change
+            setRankedAssets(prevAssets => {
+              const updated = [...prevAssets];
+              updated[0] = { ...updated[0], gap: 55, score: 9.9, lastChange: 'Update: New auction round detected' };
+              return updated;
+            });
             setTimeout(() => setShowUpsertAlert(false), 5000);
           }, 400);
           return totalRecords;
@@ -417,10 +485,10 @@ const DataInsights: React.FC<DataInsightsProps> = ({ projects }) => {
                 <table className="w-full text-left">
                     <thead className="bg-slate-950/50 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
                     <tr>
-                        <th className="px-8 py-5">Rank / ID</th>
+                        <th className="px-8 py-5">Asset / Image</th>
                         <th className="px-8 py-5 text-center">Score</th>
                         <th className="px-8 py-5">Details</th>
-                        <th className="px-8 py-5">Gap Analysis</th>
+                        <th className="px-8 py-5">Price & Gap</th>
                         <th className="px-8 py-5">Status</th>
                         <th className="px-8 py-5 text-right">Action</th>
                     </tr>
@@ -430,19 +498,27 @@ const DataInsights: React.FC<DataInsightsProps> = ({ projects }) => {
                         <tr key={asset.id} className="hover:bg-blue-600/5 transition-all group">
                         <td className="px-8 py-6">
                             <div className="flex items-center gap-5">
-                            <span className={`w-9 h-9 rounded-2xl flex items-center justify-center font-black text-sm shadow-lg ${
-                                i === 0 ? 'bg-amber-500 text-slate-950 scale-110' : 'bg-slate-800 text-slate-400'
-                            }`}>
-                                {i + 1}
-                            </span>
-                            <div>
-                                <span className="text-sm font-bold text-white block">{asset.id}</span>
-                                {asset.lastChange && (
-                                <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
-                                    <Zap className="w-2.5 h-2.5" /> {asset.lastChange}
-                                </span>
-                                )}
-                            </div>
+                                <div className="relative group/img shrink-0">
+                                     <div className="w-20 h-14 rounded-lg overflow-hidden bg-slate-800 border border-slate-700 shadow-sm">
+                                        {/* Placeholder images from Unsplash for realistic mockup */}
+                                        <img src={asset.imageUrl} alt={asset.id} className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-500" />
+                                    </div>
+                                    <div className={`absolute -top-2 -left-2 w-6 h-6 rounded-full flex items-center justify-center font-black text-[10px] shadow-lg border-2 border-slate-900 ${
+                                        i === 0 ? 'bg-amber-500 text-slate-950 scale-110' : 'bg-slate-700 text-slate-300'
+                                    }`}>
+                                        {i + 1}
+                                    </div>
+                                </div>
+                                <div>
+                                    <span className="text-sm font-bold text-white block">{asset.id}</span>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                         {asset.lastChange && (
+                                            <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                                                <Zap className="w-2.5 h-2.5" /> {asset.lastChange}
+                                            </span>
+                                         )}
+                                    </div>
+                                </div>
                             </div>
                         </td>
                         <td className="px-8 py-6 text-center">
@@ -460,15 +536,22 @@ const DataInsights: React.FC<DataInsightsProps> = ({ projects }) => {
                         </td>
                         <td className="px-8 py-6">
                             <div className="flex flex-col gap-1.5">
-                            <div className="flex justify-between w-full max-w-[120px]">
+                            <div className="flex justify-between w-full max-w-[140px] items-end">
                                 <span className="text-[10px] text-emerald-400 font-black tracking-tight">Gap: {asset.gap}%</span>
                             </div>
                             <div className="h-1.5 w-full max-w-[140px] bg-slate-800 rounded-full overflow-hidden">
                                 <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${asset.gap}%` }}></div>
                             </div>
-                            <p className="text-[9px] text-slate-500 font-bold uppercase">
-                                {formatCurrency(asset.startPrice)} / {formatCurrency(asset.appraisal)}
-                            </p>
+                            <div className="flex flex-col mt-1">
+                                 <div className="flex justify-between items-center w-full max-w-[140px]">
+                                     <span className="text-[9px] text-slate-500 font-medium uppercase">Start</span>
+                                     <span className="text-xs font-bold text-white">{formatCurrency(asset.startPrice)}</span>
+                                 </div>
+                                 <div className="flex justify-between items-center w-full max-w-[140px]">
+                                     <span className="text-[9px] text-slate-500 font-medium uppercase">Appraisal</span>
+                                     <span className="text-[10px] font-bold text-slate-400">{formatCurrency(asset.appraisal)}</span>
+                                 </div>
+                            </div>
                             </div>
                         </td>
                         <td className="px-8 py-6">

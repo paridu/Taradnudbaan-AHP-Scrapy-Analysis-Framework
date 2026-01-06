@@ -6,11 +6,11 @@ const getAI = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 /**
  * วิเคราะห์ความต้องการลงทุนทรัพย์กรมบังคับคดี (LED Investment Intent)
  */
-export const analyzeIntent = async (intent: string, url: string) => {
+export const analyzeIntent = async (intent: string, url: string, province: string = '') => {
   const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-flash-lite-latest',
-    contents: `Analyze this LED property investment intent for URL: ${url}. Intent: ${intent}. Provide a structured JSON output with fields for AHP Analysis: suggested_name, frequency_hint, fields_to_extract (price, appraisal_value, location, size, status), and investment_priority_score (1-10).`,
+    contents: `Analyze this LED property investment intent for URL: ${url}. Intent: ${intent}. Target Province: ${province || 'Not specific'}. Provide a structured JSON output with fields for AHP Analysis: suggested_name, frequency_hint, fields_to_extract (price, appraisal_value, location, size, status), difficulty_rating (1-10), and investment_priority_score (1-10).`,
     config: {
       responseMimeType: 'application/json',
       responseSchema: {
@@ -19,6 +19,7 @@ export const analyzeIntent = async (intent: string, url: string) => {
           suggested_name: { type: Type.STRING },
           frequency_hint: { type: Type.STRING },
           fields_to_extract: { type: Type.ARRAY, items: { type: Type.STRING } },
+          difficulty_rating: { type: Type.NUMBER },
           investment_priority_score: { type: Type.NUMBER }
         }
       }
@@ -28,14 +29,37 @@ export const analyzeIntent = async (intent: string, url: string) => {
 };
 
 /**
+ * แนะนำ Fields ข้อมูลที่น่าจะดึงได้จาก URL (AI Scanning)
+ */
+export const suggestScrapingFields = async (url: string) => {
+  const ai = getAI();
+  const prompt = `Analyze this URL: ${url}. Suggest 8-12 likely data fields that a user would want to scrape from this page (e.g. for e-commerce: price, title, rating; for real estate: price, appraisal_value, location, size, contact). Return ONLY a JSON array of strings in Thai or English as appropriate for the site.`;
+  
+  const response = await ai.models.generateContent({
+    model: 'gemini-flash-lite-latest',
+    contents: prompt,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING }
+      }
+    }
+  });
+  
+  return JSON.parse(response.text || '[]');
+};
+
+/**
  * สร้าง Spider Code สำหรับทรัพย์กรมบังคับคดี (LED Optimized)
  */
-export const generateSpider = async (intent: string, url: string, fields: string[], saveToDrive: boolean = false) => {
+export const generateSpider = async (intent: string, url: string, fields: string[], saveToDrive: boolean = false, province: string = '') => {
   const ai = getAI();
   const driveLogic = saveToDrive ? "Export directly to Google Drive as CSV for AHP processing." : "Standard CSV output.";
   
   const prompt = `Write a Scrapy spider for LED Properties: ${url}. 
   Focus on: ${fields.join(', ')}. 
+  ${province ? `Target Province Filter: ${province}. (IMPORTANT: If the website has a query parameter for province, use it. If not, filter the items in Python code to only yield items where location/province contains '${province}').` : ''}
   ${driveLogic}
   CRITICAL: Extract appraisal value vs starting price to calculate 'Investment Gap'. 
   Return ONLY clean Python code.`;
@@ -99,12 +123,31 @@ export const generateMockResults = async (spiderCode: string, intent: string) =>
   const ai = getAI();
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Generate 5 realistic LED property records for AHP analysis based on: ${intent}. Include: property_id, appraisal_value, start_price, location, property_type. Return as JSON array.`,
+    contents: `Generate 5 realistic LED property records for AHP analysis based on: ${intent}. Include: property_id, appraisal_value, start_price, location, property_type, status. Return as JSON array.`,
     config: {
       responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+            type: Type.OBJECT,
+            properties: {
+                property_id: { type: Type.STRING },
+                appraisal_value: { type: Type.NUMBER },
+                start_price: { type: Type.NUMBER },
+                location: { type: Type.STRING },
+                property_type: { type: Type.STRING },
+                status: { type: Type.STRING }
+            }
+        }
+      }
     }
   });
-  return JSON.parse(response.text || '[]');
+
+  if (!response.text) {
+      throw new Error("AI generated empty response");
+  }
+
+  return JSON.parse(response.text);
 };
 
 /**

@@ -19,7 +19,10 @@ import {
   BarChart4,
   History,
   Database,
-  ArrowRight
+  ArrowRight,
+  Terminal,
+  Play,
+  Download
 } from 'lucide-react';
 import { ScrapingProject } from '../types';
 import { refactorSpider, generateMockResults, calculateAHPScores } from '../services/geminiService';
@@ -43,6 +46,11 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [showPreview, setShowPreview] = useState(false);
+  
+  // Run Spider State
+  const [isRunningSpider, setIsRunningSpider] = useState(false);
+  const [showRunModal, setShowRunModal] = useState(false);
+  const [spiderLogs, setSpiderLogs] = useState<string[]>([]);
   
   // Upsert Simulation State
   const [isUpserting, setIsUpserting] = useState(false);
@@ -101,6 +109,71 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         return prev + 5;
       });
     }, 100);
+  };
+
+  const handleRunSpider = async () => {
+    setShowRunModal(true);
+    setIsRunningSpider(true);
+    setSpiderLogs(["INFO: Scrapy 2.11.0 started (bot: scrapybot)", `INFO: Spider opened: ${project.id}`, `INFO: Crawling ${project.targetUrl}`]);
+    setPreviewData([]);
+
+    // Simulation logs
+    const steps = [
+        `DEBUG: Crawled (200) <GET ${project.targetUrl}> (referer: None)`,
+        "DEBUG: Scraped from <200 ...>: {'item_scraped_count': 1}",
+        "DEBUG: Scraped from <200 ...>: {'item_scraped_count': 5}",
+        "DEBUG: Scraped from <200 ...>: {'item_scraped_count': 12}",
+        "INFO: Closing spider (finished)",
+        "INFO: Dumping Scrapy stats..."
+    ];
+
+    for (const step of steps) {
+        await new Promise(r => setTimeout(r, 800));
+        setSpiderLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${step}`]);
+    }
+
+    try {
+        const results = await generateMockResults(project.spiderCode, project.intent);
+        setPreviewData(results);
+        setSpiderLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] INFO: Spider closed: Finished. Extracted ${results.length} items.`]);
+    } catch (e: any) {
+        setSpiderLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ERROR: Pipeline failed. ${e.message || e}`]);
+    } finally {
+        setIsRunningSpider(false);
+    }
+  };
+
+  const handleExportRunResults = () => {
+      if (previewData.length === 0) return;
+      const headers = Object.keys(previewData[0]);
+      const csvRows = [
+          headers.join(','),
+          ...previewData.map(row => headers.map(header => JSON.stringify(row[header] || '')).join(','))
+      ];
+      const csvString = csvRows.join('\n');
+      const blob = new Blob([csvString], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `run_results_${project.id}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+  };
+
+  const handleExportCodeAsCSV = () => {
+    const csvContent = `Project ID,Project Name,Spider Code\n${project.id},${project.name},"${project.spiderCode.replace(/"/g, '""')}"`;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    if (link.download !== undefined) {
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `${project.id}_code.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
   };
 
   const mockActivity = [
@@ -210,7 +283,7 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <button onClick={onBack} className="p-2 bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-all border border-slate-700">
             <ArrowLeft className="w-5 h-5" />
@@ -224,6 +297,24 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </div>
         
         <div className="flex flex-wrap items-center gap-2">
+          <button 
+            onClick={handleRunSpider}
+            className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl flex items-center gap-2 transition-all font-bold text-sm shadow-lg shadow-blue-900/30"
+          >
+            <Play className="w-5 h-5 fill-current" />
+            Run Spider
+          </button>
+
+          <button 
+            onClick={handleExportCodeAsCSV}
+            className="bg-slate-800 text-slate-300 border border-slate-700 px-5 py-2.5 rounded-xl flex items-center gap-2 hover:bg-slate-700 hover:text-white transition-all font-bold text-sm"
+          >
+            <Download className="w-5 h-5" />
+            Export Code (CSV)
+          </button>
+
+          <div className="w-px h-8 bg-slate-800 mx-2 hidden md:block"></div>
+
           <button 
             onClick={handleUpsert}
             disabled={isUpserting}
@@ -250,15 +341,6 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           >
             <FileSpreadsheet className="w-5 h-5" />
             Export Data
-          </button>
-
-          <button 
-            onClick={handlePreview}
-            disabled={isPreviewing}
-            className="bg-blue-600/10 text-blue-400 border border-blue-600/20 px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-blue-600/20 transition-all font-semibold text-sm disabled:opacity-50"
-          >
-            {isPreviewing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
-            Preview Raw
           </button>
         </div>
       </div>
@@ -376,18 +458,28 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     )}
                 </div>
               </div>
-              <button 
-                onClick={handleAIRefactor}
-                disabled={isRefactoring}
-                className={`text-xs flex items-center gap-1 font-bold px-4 py-2 rounded-xl transition-all border ${
-                  needsRefactor 
-                  ? 'bg-amber-500 text-slate-900 border-amber-500 shadow-lg shadow-amber-900/30 hover:bg-amber-400' 
-                  : 'bg-blue-600/10 text-blue-400 border-blue-600/20 hover:bg-blue-600/20'
-                } disabled:opacity-50`}
-              >
-                {isRefactoring ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                AI Refactor
-              </button>
+              <div className="flex gap-2">
+                  <button 
+                    onClick={handlePreview}
+                    disabled={isPreviewing}
+                    className="bg-slate-800 text-slate-400 border border-slate-700 px-3 py-1.5 rounded-lg flex items-center gap-2 hover:bg-slate-700 hover:text-white transition-all font-bold text-xs"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    Dry Run
+                  </button>
+                  <button 
+                    onClick={handleAIRefactor}
+                    disabled={isRefactoring}
+                    className={`text-xs flex items-center gap-1 font-bold px-4 py-2 rounded-xl transition-all border ${
+                      needsRefactor 
+                      ? 'bg-amber-500 text-slate-900 border-amber-500 shadow-lg shadow-amber-900/30 hover:bg-amber-400' 
+                      : 'bg-blue-600/10 text-blue-400 border-blue-600/20 hover:bg-blue-600/20'
+                    } disabled:opacity-50`}
+                  >
+                    {isRefactoring ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                    AI Refactor
+                  </button>
+              </div>
             </div>
             <div className="relative font-mono text-sm leading-relaxed overflow-hidden">
               {isRefactoring && (
@@ -464,51 +556,87 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         </div>
       </div>
 
-      {showPreview && (
+      {/* Spider Run / Preview Modal */}
+      {(showPreview || showRunModal) && (
             <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">
-                <div className="bg-slate-900 border border-slate-800 w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in duration-300">
-                    <div className="px-8 py-5 bg-slate-800/50 border-b border-slate-800 flex items-center justify-between">
+                <div className="bg-slate-900 border border-slate-800 w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in duration-300 flex flex-col max-h-[90vh]">
+                    <div className="px-8 py-5 bg-slate-800/50 border-b border-slate-800 flex items-center justify-between shrink-0">
                         <div className="flex items-center gap-3">
-                            <TableIcon className="w-5 h-5 text-blue-400" />
-                            <span className="font-bold text-slate-100 uppercase tracking-tight">Raw Scraping Data View</span>
+                            <Terminal className="w-5 h-5 text-blue-400" />
+                            <span className="font-bold text-slate-100 uppercase tracking-tight">
+                              {showRunModal ? "Spider Execution Console" : "Raw Scraping Data Preview"}
+                            </span>
                         </div>
-                        <button onClick={() => setShowPreview(false)} className="p-2 hover:bg-slate-700 rounded-xl transition-colors text-slate-400 hover:text-white">
+                        <button 
+                          onClick={() => { setShowPreview(false); setShowRunModal(false); }} 
+                          className="p-2 hover:bg-slate-700 rounded-xl transition-colors text-slate-400 hover:text-white"
+                        >
                             <X className="w-5 h-5" />
                         </button>
                     </div>
-                    <div className="p-0 overflow-x-auto max-h-[60vh]">
-                        {isPreviewing ? (
-                            <div className="p-24 flex flex-col items-center justify-center gap-6">
-                                <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
-                                <div className="text-center">
-                                    <p className="text-blue-300 font-bold text-lg">AI กำลังประมวลผลข้อมูลล่าสุด...</p>
+
+                    <div className="flex-1 overflow-auto bg-slate-950">
+                        {showRunModal && (
+                           <div className="p-4 border-b border-slate-800 font-mono text-xs space-y-1">
+                              {spiderLogs.map((log, i) => (
+                                <div key={i} className={`${log.includes('ERROR') ? 'text-red-400' : log.includes('DEBUG') ? 'text-slate-500' : 'text-emerald-400'}`}>
+                                  {log}
                                 </div>
-                            </div>
-                        ) : previewData.length > 0 ? (
-                            <table className="w-full text-left text-sm whitespace-nowrap">
-                                <thead className="bg-slate-950/80 sticky top-0 z-10">
-                                    <tr>
-                                        {headers.map((key) => (
-                                            <th key={key} className="px-6 py-4 font-bold text-slate-500 uppercase tracking-tighter text-[11px]">{key}</th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-800">
-                                    {previewData.map((row, i) => (
-                                        <tr key={i} className="hover:bg-blue-500/5 transition-colors group">
-                                            {headers.map((header, j) => (
-                                                <td key={j} className="px-6 py-4 text-slate-300 font-medium">
-                                                    {String(row[header] ?? '-')}
-                                                </td>
+                              ))}
+                              {isRunningSpider && (
+                                <div className="text-blue-400 animate-pulse">_</div>
+                              )}
+                           </div>
+                        )}
+
+                        <div className="p-0">
+                           {/* Result Table or Loading State */}
+                           {(isPreviewing || isRunningSpider) && previewData.length === 0 ? (
+                                <div className="p-24 flex flex-col items-center justify-center gap-6">
+                                    <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+                                    <div className="text-center">
+                                        <p className="text-blue-300 font-bold text-lg">Executing Spider Logic...</p>
+                                        <p className="text-slate-500 text-sm">Parsing content and extracting fields</p>
+                                    </div>
+                                </div>
+                            ) : previewData.length > 0 ? (
+                                <table className="w-full text-left text-sm whitespace-nowrap">
+                                    <thead className="bg-slate-900 sticky top-0 z-10">
+                                        <tr>
+                                            {headers.map((key) => (
+                                                <th key={key} className="px-6 py-4 font-bold text-slate-500 uppercase tracking-tighter text-[11px] border-b border-slate-800">{key}</th>
                                             ))}
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        ) : (
-                            <div className="p-20 text-center text-slate-500">No data available in preview</div>
-                        )}
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-800">
+                                        {previewData.map((row, i) => (
+                                            <tr key={i} className="hover:bg-blue-500/5 transition-colors group">
+                                                {headers.map((header, j) => (
+                                                    <td key={j} className="px-6 py-4 text-slate-300 font-medium">
+                                                        {String(row[header] ?? '-')}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            ) : !isRunningSpider && (
+                                <div className="p-20 text-center text-slate-500">No output data generated.</div>
+                            )}
+                        </div>
                     </div>
+                    
+                    {/* Modal Footer actions */}
+                    {previewData.length > 0 && (
+                      <div className="p-4 bg-slate-900 border-t border-slate-800 flex justify-end">
+                          <button 
+                            onClick={handleExportRunResults}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl flex items-center gap-2 transition-all font-bold text-sm"
+                          >
+                            <Download className="w-4 h-4" /> Export Results to CSV
+                          </button>
+                      </div>
+                    )}
                 </div>
             </div>
       )}

@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { Search, Sparkles, Wand2, ArrowLeft, ArrowRight, Loader2, CheckCircle, Terminal, Cloud } from 'lucide-react';
+import { Search, Sparkles, Wand2, ArrowLeft, ArrowRight, Loader2, CheckCircle, Terminal, Cloud, MapPin, ScanSearch, Check } from 'lucide-react';
 import { ScrapingProject } from '../types';
-import { analyzeIntent, generateSpider } from '../services/geminiService';
+import { analyzeIntent, generateSpider, suggestScrapingFields } from '../services/geminiService';
 
 interface ProjectWizardProps {
   onComplete: (project: ScrapingProject) => void;
@@ -13,16 +13,22 @@ const ProjectWizard: React.FC<ProjectWizardProps> = ({ onComplete, onCancel }) =
   const [step, setStep] = useState(1);
   const [url, setUrl] = useState('');
   const [intent, setIntent] = useState('');
+  const [province, setProvince] = useState('ปราจีนบุรี');
   const [saveToDrive, setSaveToDrive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
   const [generatedCode, setGeneratedCode] = useState('');
 
+  // Field suggestions state
+  const [suggestedFields, setSuggestedFields] = useState<string[]>([]);
+  const [selectedFields, setSelectedFields] = useState<string[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
+
   const handleStartAnalysis = async () => {
     if (!url || !intent) return;
     setLoading(true);
     try {
-      const res = await analyzeIntent(intent, url);
+      const res = await analyzeIntent(intent, url, province);
       setAnalysis(res);
       setStep(2);
     } catch (error) {
@@ -35,7 +41,7 @@ const ProjectWizard: React.FC<ProjectWizardProps> = ({ onComplete, onCancel }) =
   const handleGenerateSpider = async () => {
     setLoading(true);
     try {
-      const code = await generateSpider(intent, url, analysis.fields_to_extract, saveToDrive);
+      const code = await generateSpider(intent, url, analysis.fields_to_extract, saveToDrive, province);
       setGeneratedCode(code);
       setStep(3);
     } catch (error) {
@@ -45,12 +51,48 @@ const ProjectWizard: React.FC<ProjectWizardProps> = ({ onComplete, onCancel }) =
     }
   };
 
+  const handleScanUrl = async () => {
+    if (!url) return;
+    setIsScanning(true);
+    setSuggestedFields([]);
+    setSelectedFields([]);
+    try {
+        const fields = await suggestScrapingFields(url);
+        setSuggestedFields(fields);
+        // Default select all suggestions initially to be helpful
+        setSelectedFields(fields);
+        updateIntent(fields);
+    } catch (error) {
+        console.error("Scan failed", error);
+        // Fallback fields
+        setSuggestedFields(['Title', 'Price', 'Description', 'Image URL']);
+    } finally {
+        setIsScanning(false);
+    }
+  };
+
+  const toggleField = (field: string) => {
+    const newSelection = selectedFields.includes(field)
+        ? selectedFields.filter(f => f !== field)
+        : [...selectedFields, field];
+    setSelectedFields(newSelection);
+    updateIntent(newSelection);
+  };
+
+  const updateIntent = (fields: string[]) => {
+      if (fields.length > 0) {
+          setIntent(`Extract the following fields from ${url}: ${fields.join(', ')}. Focus on gathering data for investment analysis.`);
+      } else {
+          setIntent('');
+      }
+  };
+
   const handleFinish = () => {
     const newProject: ScrapingProject = {
       id: Math.random().toString(36).substr(2, 9),
       name: analysis.suggested_name,
       targetUrl: url,
-      intent,
+      intent: `${intent} (จังหวัด: ${province})`,
       status: 'active',
       health: 100,
       lastRun: 'เพิ่งสร้าง',
@@ -84,46 +126,107 @@ const ProjectWizard: React.FC<ProjectWizardProps> = ({ onComplete, onCancel }) =
                   <Sparkles className="text-blue-400 w-6 h-6" />
                   ระบุเป้าหมายของคุณ
                 </h2>
-                <p className="text-slate-400">บอก AI ว่าคุณต้องการดูดข้อมูลอะไร ไม่ต้องเขียนโค้ดเอง</p>
+                <p className="text-slate-400">บอก AI ว่าคุณต้องการดูดข้อมูลอะไร (Auto-Scan Available)</p>
               </div>
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1.5">URL ของเว็บไซต์เป้าหมาย</label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                    <input 
-                      type="text" 
-                      placeholder="https://example.com/products"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
-                      value={url}
-                      onChange={(e) => setUrl(e.target.value)}
-                    />
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                        <input 
+                        type="text" 
+                        placeholder="https://example.com/products"
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
+                        value={url}
+                        onChange={(e) => setUrl(e.target.value)}
+                        />
+                    </div>
+                    <button 
+                        onClick={handleScanUrl}
+                        disabled={isScanning || !url}
+                        className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-blue-400 font-bold px-4 rounded-xl flex items-center gap-2 border border-slate-700 transition-all"
+                    >
+                        {isScanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <ScanSearch className="w-4 h-4" />}
+                        Scan
+                    </button>
                   </div>
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                   <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">ระบุจังหวัด (Filter)</label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                      <select
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all appearance-none cursor-pointer"
+                        value={province}
+                        onChange={(e) => setProvince(e.target.value)}
+                      >
+                        <option value="ปราจีนบุรี">ปราจีนบุรี (Default)</option>
+                        <option value="กรุงเทพมหานคร">กรุงเทพมหานคร</option>
+                        <option value="ชลบุรี">ชลบุรี</option>
+                        <option value="ระยอง">ระยอง</option>
+                        <option value="ฉะเชิงเทรา">ฉะเชิงเทรา</option>
+                        <option value="นครราชสีมา">นครราชสีมา</option>
+                        <option value="เชียงใหม่">เชียงใหม่</option>
+                        <option value="ภูเก็ต">ภูเก็ต</option>
+                        <option value="ทุกจังหวัด">ทุกจังหวัด (All)</option>
+                      </select>
+                    </div>
+                   </div>
+                   <div className="flex items-end">
+                      <div className="w-full flex items-center gap-3 p-3.5 bg-slate-800/40 rounded-xl border border-slate-700 h-[50px]">
+                        <input 
+                          type="checkbox" 
+                          id="drive-save"
+                          checked={saveToDrive}
+                          onChange={(e) => setSaveToDrive(e.target.checked)}
+                          className="w-5 h-5 accent-blue-600 cursor-pointer shrink-0"
+                        />
+                        <label htmlFor="drive-save" className="text-sm text-slate-200 cursor-pointer flex items-center gap-2 truncate">
+                          <Cloud className="w-4 h-4 text-blue-400" /> Auto-save to Drive
+                        </label>
+                      </div>
+                   </div>
+                </div>
+
+                {suggestedFields.length > 0 && (
+                    <div className="bg-slate-800/20 border border-slate-800 rounded-xl p-4 animate-in fade-in zoom-in-95">
+                        <label className="block text-xs font-bold text-blue-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                            <Sparkles className="w-3 h-3" /> AI Detected Fields (Click to Select)
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                            {suggestedFields.map((field) => (
+                                <button
+                                    key={field}
+                                    onClick={() => toggleField(field)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                                        selectedFields.includes(field)
+                                        ? 'bg-blue-600 text-white border-blue-500 shadow-md'
+                                        : 'bg-slate-900 text-slate-400 border-slate-700 hover:border-slate-500'
+                                    }`}
+                                >
+                                    {selectedFields.includes(field) && <Check className="w-3 h-3" />}
+                                    {field}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1.5">อธิบายความต้องการ (ภาษาไทย)</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                    {suggestedFields.length > 0 ? "ความต้องการที่ระบบสร้างให้ (แก้ไขได้)" : "อธิบายความต้องการ (ภาษาไทย)"}
+                  </label>
                   <textarea 
                     rows={4}
-                    placeholder="เช่น ฉันต้องการเก็บชื่อสินค้า ราคา และสถานะสต็อกสินค้าจากหน้าจอนี้ และบันทึกเป็นไฟล์ทุกเช้า"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none"
+                    placeholder={suggestedFields.length > 0 ? "" : "เช่น ฉันต้องการเก็บชื่อสินค้า ราคา และสถานะสต็อกสินค้าจากหน้าจอนี้ และบันทึกเป็นไฟล์ทุกเช้า"}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none font-medium text-sm"
                     value={intent}
                     onChange={(e) => setIntent(e.target.value)}
                   />
-                </div>
-
-                <div className="flex items-center gap-3 p-4 bg-slate-800/40 rounded-xl border border-slate-700">
-                  <input 
-                    type="checkbox" 
-                    id="drive-save"
-                    checked={saveToDrive}
-                    onChange={(e) => setSaveToDrive(e.target.checked)}
-                    className="w-5 h-5 accent-blue-600 cursor-pointer"
-                  />
-                  <label htmlFor="drive-save" className="text-sm text-slate-200 cursor-pointer flex items-center gap-2">
-                    <Cloud className="w-4 h-4 text-blue-400" /> บันทึกผลลัพธ์ลง Google Drive อัตโนมัติ
-                  </label>
                 </div>
               </div>
 
@@ -155,8 +258,8 @@ const ProjectWizard: React.FC<ProjectWizardProps> = ({ onComplete, onCancel }) =
                     <p className="text-white font-medium mt-1">{analysis.suggested_name}</p>
                   </div>
                   <div className="p-4 bg-slate-900 rounded-xl border border-slate-800/50">
-                    <p className="text-xs text-slate-500 font-semibold uppercase">ความถี่</p>
-                    <p className="text-white font-medium mt-1 capitalize">{analysis.frequency_hint}</p>
+                    <p className="text-xs text-slate-500 font-semibold uppercase">พื้นที่เป้าหมาย</p>
+                    <p className="text-white font-medium mt-1">{province}</p>
                   </div>
                 </div>
 

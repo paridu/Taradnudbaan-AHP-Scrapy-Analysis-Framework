@@ -23,13 +23,15 @@ import {
   FileText,
   FileCode,
   ArrowDownToLine,
-  Sparkles
+  Sparkles,
+  Globe
 } from 'lucide-react';
 
 interface DriveFile {
   id: string;
   name: string;
   project?: string;
+  sourceUrl?: string;
   size: string;
   date: string;
   type: 'csv' | 'json' | 'folder' | 'txt' | 'py';
@@ -42,22 +44,31 @@ const DriveExplorer: React.FC = () => {
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
-  // Mock data representing a deeper folder structure
-  const allFiles: DriveFile[] = [
+  // Folder creation state
+  const [isCreateFolderModalOpen, setIsCreateFolderModalOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+
+  // Mock data representing a deeper folder structure managed in state
+  const [files, setFiles] = useState<DriveFile[]>([
     { id: '1', name: 'AI-Scrapy-Exports', type: 'folder', parentId: null, size: '--', date: '5 วันที่แล้ว' },
     { id: '2', name: 'Backup_Spiders', type: 'folder', parentId: null, size: '--', date: '2 สัปดาห์ที่แล้ว' },
-    { id: 'f1', name: 'prachinburi_properties_20240520.csv', project: 'ตลาดนัดบ้าน', size: '1.2 MB', date: '10 นาทีที่แล้ว', type: 'csv', parentId: '1' },
-    { id: 'f2', name: 'amazon_gaming_laptops_daily.json', project: 'จับตาคู่แข่ง Amazon', size: '450 KB', date: '2 ชั่วโมงที่แล้ว', type: 'json', parentId: '1' },
-    { id: 'f3', name: 'property_leads_full_export.csv', project: 'ตลาดนัดบ้าน', size: '4.8 MB', date: 'เมื่อวานนี้', type: 'csv', parentId: '1' },
-    { id: 'f4', name: 'competitor_prices_v1.csv', project: 'จับตาคู่แข่ง Amazon', size: '120 KB', date: '2 วันที่แล้ว', type: 'csv', parentId: '1' },
-    { id: 'f5', name: 'taladnudbaan_v2_code.py', project: 'ตลาดนัดบ้าน', size: '12 KB', date: '3 วันที่แล้ว', type: 'py', parentId: '2' },
-    { id: 'f6', name: 'amazon_v1_backup.py', project: 'จับตาคู่แข่ง Amazon', size: '8 KB', date: '1 สัปดาห์ที่แล้ว', type: 'py', parentId: '2' },
+    { id: 'f1', name: 'prachinburi_properties_20240520.csv', project: 'ตลาดนัดบ้าน', sourceUrl: 'https://www.taladnudbaan.com/properties?member=led', size: '1.2 MB', date: '10 นาทีที่แล้ว', type: 'csv', parentId: '1' },
+    { id: 'f2', name: 'amazon_gaming_laptops_daily.json', project: 'จับตาคู่แข่ง Amazon', sourceUrl: 'https://www.amazon.com/s?k=gaming+laptops', size: '450 KB', date: '2 ชั่วโมงที่แล้ว', type: 'json', parentId: '1' },
+    { id: 'f3', name: 'property_leads_full_export.csv', project: 'ตลาดนัดบ้าน', sourceUrl: 'https://www.taladnudbaan.com/properties', size: '4.8 MB', date: 'เมื่อวานนี้', type: 'csv', parentId: '1' },
+    { id: 'f4', name: 'competitor_prices_v1.csv', project: 'จับตาคู่แข่ง Amazon', sourceUrl: 'https://www.amazon.com', size: '120 KB', date: '2 วันที่แล้ว', type: 'csv', parentId: '1' },
+    { id: 'f5', name: 'taladnudbaan_v2_code.py', project: 'ตลาดนัดบ้าน', sourceUrl: 'https://www.taladnudbaan.com', size: '12 KB', date: '3 วันที่แล้ว', type: 'py', parentId: '2' },
+    { id: 'f6', name: 'amazon_v1_backup.py', project: 'จับตาคู่แข่ง Amazon', sourceUrl: 'https://www.amazon.com', size: '8 KB', date: '1 สัปดาห์ที่แล้ว', type: 'py', parentId: '2' },
     { id: 'f7', name: 'readme_notes.txt', size: '2 KB', date: 'วันนี้', type: 'txt', parentId: null },
-  ];
+  ]);
 
   const currentFolder = useMemo(() => 
-    allFiles.find(f => f.id === currentFolderId), 
-    [currentFolderId]
+    files.find(f => f.id === currentFolderId), 
+    [currentFolderId, files]
+  );
+
+  const rootFolders = useMemo(() => 
+    files.filter(f => f.type === 'folder' && f.parentId === null),
+    [files]
   );
 
   const breadcrumbs = useMemo(() => {
@@ -65,20 +76,20 @@ const DriveExplorer: React.FC = () => {
     let current = currentFolder;
     while (current) {
       path.unshift(current);
-      current = allFiles.find(f => f.id === current?.parentId);
+      current = files.find(f => f.id === current?.parentId);
     }
     return path;
-  }, [currentFolder]);
+  }, [currentFolder, files]);
 
   const filteredFiles = useMemo(() => {
-    return allFiles.filter(f => {
+    return files.filter(f => {
       const matchesSearch = f.name.toLowerCase().includes(search.toLowerCase()) || 
                            (f.project?.toLowerCase().includes(search.toLowerCase()) ?? false);
       const matchesFolder = f.parentId === currentFolderId;
       // If searching, show all matches regardless of folder, otherwise show folder contents
       return search ? matchesSearch : matchesFolder;
     });
-  }, [allFiles, search, currentFolderId]);
+  }, [files, search, currentFolderId]);
 
   const handleExport = () => {
     setIsExporting(true);
@@ -87,6 +98,23 @@ const DriveExplorer: React.FC = () => {
       setIsExporting(false);
       alert('เริ่มการส่งออกข้อมูลทั้งหมด (94,016 รายการ) ไปยังเครื่องของคุณสำเร็จ!');
     }, 1500);
+  };
+
+  const handleCreateFolder = () => {
+    if (!newFolderName.trim()) return;
+    
+    const newFolder: DriveFile = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: newFolderName.trim(),
+      type: 'folder',
+      parentId: currentFolderId,
+      size: '--',
+      date: 'Just now'
+    };
+    
+    setFiles(prev => [...prev, newFolder]);
+    setNewFolderName('');
+    setIsCreateFolderModalOpen(false);
   };
 
   const getFileIcon = (type: string) => {
@@ -133,15 +161,51 @@ const DriveExplorer: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Actions Sidebar */}
+        {/* Actions Sidebar & Navigator */}
         <div className="lg:col-span-1 space-y-4">
+          
+          {/* Navigator */}
+          <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-3xl shadow-xl">
+            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Navigator</h3>
+            <div className="flex flex-col gap-1">
+                <button 
+                  onClick={() => setCurrentFolderId(null)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-xs font-bold ${
+                    currentFolderId === null 
+                    ? 'bg-blue-600 text-white shadow-md' 
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  <Cloud className="w-4 h-4" />
+                  My Drive
+                </button>
+                {rootFolders.map(folder => (
+                  <button 
+                    key={folder.id}
+                    onClick={() => setCurrentFolderId(folder.id)}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-xs font-bold ${
+                      currentFolderId === folder.id 
+                      ? 'bg-slate-800 text-blue-400 border border-blue-500/30' 
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                    }`}
+                  >
+                    <Folder className={`w-4 h-4 ${currentFolderId === folder.id ? 'text-blue-400' : 'text-amber-500/50'}`} />
+                    {folder.name}
+                  </button>
+                ))}
+            </div>
+          </div>
+
           <div className="bg-slate-900/50 border border-slate-800 p-6 rounded-3xl shadow-xl">
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">ดึงข้อมูล & อัปโหลด</h3>
             <div className="space-y-2">
               <button className="w-full flex items-center gap-3 p-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all font-semibold">
                 <Upload className="w-4 h-4" /> อัปโหลดไฟล์
               </button>
-              <button className="w-full flex items-center gap-3 p-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl transition-all font-semibold border border-slate-700">
+              <button 
+                onClick={() => setIsCreateFolderModalOpen(true)}
+                className="w-full flex items-center gap-3 p-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl transition-all font-semibold border border-slate-700"
+              >
                 <FolderPlus className="w-4 h-4 text-amber-400" /> สร้างโฟลเดอร์
               </button>
             </div>
@@ -254,8 +318,20 @@ const DriveExplorer: React.FC = () => {
                   <div className="space-y-1">
                     <h4 className="font-bold text-slate-200 text-base truncate" title={file.name}>{file.name}</h4>
                     {file.project && (
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center justify-between">
                          <span className="text-[10px] text-slate-500 font-bold uppercase tracking-tight bg-slate-800 px-2 py-0.5 rounded-md">{file.project}</span>
+                         {file.sourceUrl && (
+                           <a 
+                             href={file.sourceUrl} 
+                             target="_blank" 
+                             rel="noopener noreferrer"
+                             className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1 font-bold transition-colors"
+                             title="Go to source website"
+                             onClick={(e) => e.stopPropagation()}
+                           >
+                             <Globe className="w-3 h-3" /> Web Source
+                           </a>
+                         )}
                       </div>
                     )}
                   </div>
@@ -316,7 +392,21 @@ const DriveExplorer: React.FC = () => {
                       </td>
                       <td className="px-6 py-4">
                         {file.project ? (
-                          <span className="text-[10px] font-bold text-slate-500 bg-slate-800/50 px-2 py-0.5 rounded-md">{file.project}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold text-slate-500 bg-slate-800/50 px-2 py-0.5 rounded-md">{file.project}</span>
+                            {file.sourceUrl && (
+                              <a 
+                                href={file.sourceUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-slate-500 hover:text-blue-400 transition-colors p-1 hover:bg-slate-800 rounded"
+                                title="Go to source website"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Globe className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
                         ) : '--'}
                       </td>
                       <td className="px-6 py-4 text-xs text-slate-500 font-medium">{file.size}</td>
@@ -354,6 +444,41 @@ const DriveExplorer: React.FC = () => {
           )}
         </div>
       </div>
+      
+      {/* Create Folder Modal */}
+      {isCreateFolderModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+              <FolderPlus className="w-6 h-6 text-amber-400" /> Create New Folder
+            </h3>
+            <input
+              type="text"
+              placeholder="Folder Name"
+              autoFocus
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateFolder()}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 px-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 mb-6"
+            />
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setIsCreateFolderModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleCreateFolder}
+                disabled={!newFolderName.trim()}
+                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-6 py-2 rounded-xl font-bold transition-all shadow-lg shadow-blue-900/20"
+              >
+                Create Folder
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

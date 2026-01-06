@@ -18,6 +18,7 @@ import DataInsights from './components/DataInsights';
 import LogViewer from './components/LogViewer';
 import AIChatBot from './components/AIChatBot';
 import DriveExplorer from './components/DriveExplorer';
+import SystemSettings from './components/SystemSettings';
 
 const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>(AppView.DASHBOARD);
@@ -117,6 +118,8 @@ class LEDInvestmentSpider(scrapy.Spider):
         return <LogViewer />;
       case AppView.DRIVE_EXPLORER:
         return <DriveExplorer />;
+      case AppView.SETTINGS:
+        return <SystemSettings />;
       default:
         return <Dashboard projects={projects} onSelectProject={setSelectedProjectId} onAddProject={() => {}} />;
     }
@@ -150,7 +153,10 @@ class LEDInvestmentSpider(scrapy.Spider):
         </nav>
 
         <div className="p-4 border-t border-slate-800">
-          <button className="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-white transition-all w-full">
+          <button 
+            onClick={() => setCurrentView(AppView.SETTINGS)}
+            className={`flex items-center gap-3 px-4 py-3 transition-all w-full rounded-xl ${currentView === AppView.SETTINGS ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'}`}
+          >
             <Settings className="w-5 h-5" />
             {isSidebarOpen && <span>ตั้งค่าระบบ</span>}
           </button>
@@ -164,7 +170,7 @@ class LEDInvestmentSpider(scrapy.Spider):
               <Menu className="w-5 h-5" />
             </button>
             <h1 className="font-semibold text-slate-200 uppercase tracking-widest text-sm">
-              {navItems.find(n => n.id === currentView)?.label || 'System OverView'}
+              {currentView === AppView.SETTINGS ? 'System Configuration' : (navItems.find(n => n.id === currentView)?.label || 'System OverView')}
             </h1>
           </div>
           <div className="flex items-center gap-4">
